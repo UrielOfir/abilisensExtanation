@@ -1,5 +1,6 @@
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
   console.log("getUserMedia supported.");
+  
   navigator.mediaDevices
     .getUserMedia(
       // constraints - only audio needed for this app
@@ -7,10 +8,11 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         audio: true,
       }
     )
-
+    
     // Success callback
     .then(function (stream) {
       console.log('We have permmision');
+      chrome.runtime.sendMessage("recordIsWorking");
     })
 
     // Error callback
