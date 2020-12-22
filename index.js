@@ -10,6 +10,7 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     )
     .then(function(){
       chrome.runtime.sendMessage("Recording allowed");
+      window.close();
     })
     // Error callback
     .catch(function (err) {
