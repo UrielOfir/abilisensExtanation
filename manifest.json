@@ -4,7 +4,7 @@
     "description": "Listening to the sounds that the microphone picks up, identifying unusual sounds and sending them to abilisense",
     "permissions": ["declarativeContent", "storage", "filesystem"],
     "background": {
-      "scripts": ["background.js"],
+      "scripts": ["WavAudioEncoder.js", "WebAudioRecorder.js", "background.js" ],
       "persistent": false
     },
     "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
