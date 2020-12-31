@@ -37,18 +37,18 @@ function run() {
 }
 
 function processStream(analyser, audioRecorder) {
-  if (findHighDecibels(analyser)) {
-    console.log("higeDec");
-    record(audioRecorder);
-    audioRecorder.onComplete = function (audioRecorder, blob) {
-      console.log(blob);
-      fetchBlob(blob);
-      processStream(analyser, audioRecorder);
+  findHighDecibels(analyser);
+  chrome.runtime.onMessage.addListener(function (req) {
+    if (req === "High decibels were found") {
+      record(audioRecorder);
+      audioRecorder.onComplete = function (audioRecorder, blob) {
+        console.log(blob);
+        fetchBlob(blob);
+        processStream(analyser, audioRecorder);
+      };
     };
-  }
-  else{
-    setTimeout(processStream(analyser, audioRecorder),200);
-  }
+  });  
+  
 }
 
 function createAnalyser(ctx) {
@@ -62,9 +62,9 @@ function findHighDecibels(analyser) {
   analyser.getFloatFrequencyData(dataArray);
   filter = dataArray.filter((threshold) => threshold > -25);
   if (filter.length > 0) {
-    return true;
+    chrome.runtime.sendMessage("High decibels were found");
   } else {
-    return false;
+    setTimeout(findHighDecibels(), 0);
   }
 }
 
