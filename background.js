@@ -1,10 +1,98 @@
 chrome.runtime.onInstalled.addListener(function () {
   window.open("index.html");
+
+  let re = new RegExp("ab+c");
+  chrome.declarativeContent.onPageChanged.removeRules(undefined, function () {
+    chrome.declarativeContent.onPageChanged.addRules([
+      {
+        conditions: [
+          new chrome.declarativeContent.PageStateMatcher({
+            pageUrl: { urlContains: ":" },
+          }),
+        ],
+        actions: [new chrome.declarativeContent.ShowPageAction()],
+      },
+    ]);
+  });
 });
 
 chrome.runtime.onMessage.addListener(function (req) {
   if (req === "Recording allowed") startWorking();
 });
+
+function run() {
+  const ctx = new AudioContext({
+    sampleRate: 44100,
+  });
+  navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    const source = ctx.createMediaStreamSource(stream);
+    audioRecorder = new WebAudioRecorder(source, {
+      workerDir: "/", // must end with slash
+      numChannels: 1,
+    });
+    const analyser = createAnalyser(ctx);
+    source.connect(analyser);
+    processStream(analyser, audioRecorder);
+  });
+}
+
+function processStream(analyser, audioRecorder) {
+  if (findHighDecibels(analyser)) {
+    console.log("higeDec");
+    record(audioRecorder);
+    audioRecorder.onComplete = function (audioRecorder, blob) {
+      console.log(blob);
+      fetchBlob(blob);
+      processStream(analyser, audioRecorder);
+    };
+  }
+  else{
+    setTimeout(processStream(analyser, audioRecorder),200);
+  }
+}
+
+function createAnalyser(ctx) {
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  return analyser;
+}
+
+function findHighDecibels(analyser) {
+  const dataArray = new Float32Array(analyser.frequencyBinCount);
+  analyser.getFloatFrequencyData(dataArray);
+  filter = dataArray.filter((threshold) => threshold > -25);
+  if (filter.length > 0) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function record(audioRecorder) {
+  console.log("we record");
+  audioRecorder.startRecording();
+  setTimeout(() => {
+    audioRecorder.finishRecording();
+  }, 5 * 1000);
+}
+
+function fetchBlob(blob) {
+  console.log("fetch");
+  const bodyB = new FormData();
+  bodyB.append("audiofile", blob);
+  bodyB.append("samplingrate", "44100");
+  fetch("http://api.abilisense.com/v1/api/predict", {
+    method: "POST",
+    headers: {
+      "X-Abilisense-Api-Key": "0479e58c-3258-11e8-b467-4d41j4-Uriel",
+    },
+    body: bodyB,
+  })
+    .then((resp) => resp.json())
+    .then((r) => console.log(r));
+}
+
+///-----------------------
 
 function startWorking() {
   navigator.mediaDevices
@@ -16,115 +104,53 @@ function startWorking() {
 
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
-      const destination = ctx.createMediaStreamDestination();
-
       source.connect(analyser);
-
-      analyser.fftSize = 2048;
-      let bufferLength = analyser.frequencyBinCount;
-      window._dataArray = new Float32Array(bufferLength);
-
-      function findHighDecibels() {
-        d = new Date();
-        analyser.getFloatFrequencyData(window._dataArray);
-        let filter = window._dataArray.filter((threshold) => threshold > -25);
-        if (filter.length > 0) {
-          console.log("high decibels at ", d);
-          record();
-          setTimeout(findHighDecibels, 15 * 1000);
-        } else setTimeout(findHighDecibels, 0);
-      }
 
       audioRecorder = new WebAudioRecorder(source, {
         workerDir: "/", // must end with slash
         numChannels: 1,
       });
 
-      audioRecorder.startRecording();
-      setTimeout(() => {
-        audioRecorder.finishRecording();
-      }, 5 * 1000);
-      audioRecorder.onComplete = function (audioRecorder, blob) {
-        createDownloadLink(blob, audioRecorder.encoding);
-      };
+      analyser.fftSize = 2048;
+      let bufferLength = analyser.frequencyBinCount;
+      window._dataArray = new Float32Array(bufferLength);
 
-      function createDownloadLink(blob, encoding) {
-        let url = URL.createObjectURL(blob);
-        window.open(url);
+      findHighDecibels();
 
-        const body = new FormData();
-        body.append("audiofile", url + ";type=audio/wav");
-        body.append("samplingrate", "44100");
+      function findHighDecibels() {
+        analyser.getFloatFrequencyData(window._dataArray);
+        let filter = window._dataArray.filter((threshold) => threshold > -100);
+        if (filter.length > 0) {
+          record();
+          setTimeout(findHighDecibels, 9 * 1000);
+        } else setTimeout(findHighDecibels, 0);
+      }
 
+      function record() {
+        audioRecorder.startRecording();
+        setTimeout(() => {
+          audioRecorder.finishRecording();
+        }, 8 * 1000);
+        audioRecorder.onComplete = function (audioRecorder, blob) {
+          console.log(blob);
+          fetchBlob(blob);
+        };
+      }
+
+      const fetchBlob = (blob) => {
+        const bodyB = new FormData();
+        bodyB.append("audiofile", blob);
+        bodyB.append("samplingrate", "44100");
         fetch("http://api.abilisense.com/v1/api/predict", {
-          body,
+          method: "POST",
           headers: {
-            Accept: "application/json",
-            "Content-Type": "multipart/form-data",
             "X-Abilisense-Api-Key": "0479e58c-3258-11e8-b467-4d41j4-Uriel",
           },
-          method: "POST",
-          mode: "no-cors",
+          body: bodyB,
         })
-          .then((response) => console.log(response))
-          .catch(function (err) {
-            console.log(err);
-          });
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        type: "audio/wav; codecs=MS_PCM",
-        audioBitsPerSecond: 16000,
-      });
-
-      //record();
-      // is it good that the media recorder is working with the original stream?
-      function record() {
-        mediaRecorder.start();
-        console.log(mediaRecorder.state, mediaRecorder.mimeType);
-        let chunks = [];
-        mediaRecorder.ondataavailable = function (e) {
-          chunks.push(e.data);
-        };
-
-        setTimeout(() => {
-          mediaRecorder.stop();
-        }, 3 * 1000);
-
-        mediaRecorder.onstop = function (e) {
-          console.log(mediaRecorder.state);
-          const blob = new Blob(chunks, { type: "audio/wav; codecs=MS_PCM" });
-          chunks = [];
-          const audioURL = window.URL.createObjectURL(blob);
-          window.open(audioURL);
-
-          setTimeout(() => {
-            const body = new FormData();
-            body.append("audiofile", audioURL + ";type=audio/wav");
-            body.append("samplingrate", "44100");
-
-            fetch("http://api.abilisense.com/v1/api/predict", {
-              body,
-              headers: {
-                Accept: "application/json",
-                "Content-Type": "multipart/form-data",
-                "X-Abilisense-Api-Key": "0479e58c-3258-11e8-b467-4d41j4-Uriel",
-              },
-              method: "POST",
-              mode: "no-cors",
-            })
-              .then((response) => console.log(response))
-              .catch(function (err) {
-                console.log(err);
-              });
-          }, 10 * 1000);
-
-          //   Access to fetch at 'http://api.abilisense.com/v1/api/predict' from origin 'chrome-extension://edmkodepdbnhipjlkjnheofidkjnloja' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. If an opaque response serves your needs,
-          //   set the request's mode to 'no-cors' to fetch the resource with CORS disabled.
-        };
-      }
-
-      //findHighDecibels();
+          .then((resp) => resp.json())
+          .then((r) => console.log(r));
+      };
     })
     .catch(function (err) {
       console.log("The following getUserMedia error occured: " + err);
