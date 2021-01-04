@@ -8,7 +8,6 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       chrome.runtime.sendMessage("Recording allowed");
       window.close();
     })
-    // Error callback
     .catch(function (err) {
       console.error("The following getUserMedia error occured: " + err);
     });
