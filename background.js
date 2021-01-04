@@ -16,16 +16,17 @@ chrome.runtime.onInstalled.addListener(function () {
 });
 
 let allowRecord = true;
-let decibelsThreshold = -100;
+let decibelsThreshold;
+if (localStorage.decibelsThreshold === undefined) decibelsThreshold = -25;
+else decibelsThreshold= localStorage.decibelsThreshold;
 
 chrome.runtime.onMessage.addListener(function (req) {
   if (req === "Recording allowed") run();
   if (req === "Allow record: true") allowRecord = true;
   if (req === "Allow record: false") allowRecord = false;
   if (req.match(/Decibels threshold:/) !== null) {
-    let decibelsValue = req.match(/-?\d+/g)[0];
-    decibelsValue = parseInt(decibelsValue);
-    decibelsRangeView = decibelsValue;
+    decibelsThreshold = req.match(/-?\d+/g)[0];
+    decibelsThreshold = parseInt(decibelsThreshold);
   }
 });
 
